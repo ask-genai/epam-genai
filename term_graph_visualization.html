@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenAI Vocabulary - Term Relationship Graph</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+        .chart-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 20px;
+        }
+        .chart {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .chart h2 {
+            font-size: 16px;
+            color: #764ba2;
+            margin-top: 0;
+            text-align: center;
+        }
+        svg {
+            display: block;
+            margin: 0 auto;
+        }
+        .bar {
+            fill: #667eea;
+            transition: all 0.3s ease;
+        }
+        .bar:hover {
+            fill: #764ba2;
+        }
+        .bar-label {
+            font-size: 11px;
+            fill: #333;
+            text-anchor: middle;
+        }
+        .bar-value {
+            font-size: 12px;
+            fill: #667eea;
+            font-weight: bold;
+        }
+        .node {
+            cursor: pointer;
+            stroke: #fff;
+            stroke-width: 1.5px;
+        }
+        .node:hover {
+            filter: brightness(1.2);
+        }
+        .link {
+            stroke: #ddd;
+            stroke-opacity: 0.6;
+            stroke-width: 1.5px;
+        }
+        .stats {
+            background: #f0f4ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        .stat-item {
+            display: inline-block;
+            margin-right: 30px;
+            font-size: 14px;
+        }
+        .stat-value {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 18px;
+        }
+        @media (max-width: 900px) {
+            .chart-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GenAI Vocabulary Term Relationship Graph</h1>
+        <p class="subtitle">Analysis of vocabulary term usage in the research report</p>
+        
+        <div class="stats">
+            <div class="stat-item">Total Vocabulary Terms: <span class="stat-value" id="totalTerms">25</span></div>
+            <div class="stat-item">Terms Used: <span class="stat-value" id="termsUsed">18</span></div>
+            <div class="stat-item">Total Mentions: <span class="stat-value" id="totalMentions">42</span></div>
+        </div>
+        
+        <div class="chart-container">
+            <div class="chart">
+                <h2>Explicit Term Frequency (Top 12)</h2>
+                <svg id="barChart" width="100%" height="400"></svg>
+            </div>
+            <div class="chart">
+                <h2>Term Relationship Network</h2>
+                <svg id="networkChart" width="100%" height="400"></svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data for visualization
+        const termData = [
+            {term: 'Chatbot', count: 8},
+            {term: 'API', count: 7},
+            {term: 'LLM', count: 6},
+            {term: 'Fine-tuning', count: 6},
+            {term: 'Latency', count: 5},
+            {term: 'Compliance', count: 5},
+            {term: 'Inference', count: 4},
+            {term: 'NLP', count: 4},
+            {term: 'Model Bias', count: 4},
+            {term: 'Knowledge Base', count: 3},
+            {term: 'Hallucination', count: 3},
+            {term: 'Token', count: 3}
+        ];
+
+        const relatedTerms = [
+            {source: 'Chatbot', target: 'NLP', value: 5},
+            {source: 'Chatbot', target: 'API', value: 4},
+            {source: 'LLM', target: 'Token', value: 3},
+            {source: 'Fine-tuning', target: 'LLM', value: 3},
+            {source: 'API', target: 'Inference', value: 3},
+            {source: 'Compliance', target: 'Latency', value: 2},
+            {source: 'Knowledge Base', target: 'Chatbot', value: 2},
+            {source: 'Hallucination', target: 'LLM', value: 2}
+        ];
+
+        // Bar Chart
+        const margin = {top: 20, right: 20, bottom: 60, left: 20};
+        const width = document.getElementById('barChart').parentElement.offsetWidth - 40 - margin.left - margin.right;
+        const height = 360 - margin.top - margin.bottom;
+
+        const svg1 = d3.select('#barChart')
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
+
+        const x = d3.scaleBand()
+            .domain(termData.map(d => d.term))
+            .range([0, width])
+            .padding(0.2);
+
+        const y = d3.scaleLinear()
+            .domain([0, d3.max(termData, d => d.count)])
+            .range([height, 0]);
+
+        svg1.selectAll('.bar')
+            .data(termData)
+            .enter()
+            .append('rect')
+            .attr('class', 'bar')
+            .attr('x', d => x(d.term))
+            .attr('width', x.bandwidth())
+            .attr('y', d => y(d.count))
+            .attr('height', d => height - y(d.count));
+
+        svg1.selectAll('.bar-label')
+            .data(termData)
+            .enter()
+            .append('text')
+            .attr('class', 'bar-label')
+            .attr('x', d => x(d.term) + x.bandwidth() / 2)
+            .attr('y', height + 15)
+            .text(d => d.term);
+
+        svg1.selectAll('.bar-value')
+            .data(termData)
+            .enter()
+            .append('text')
+            .attr('class', 'bar-value')
+            .attr('x', d => x(d.term) + x.bandwidth() / 2)
+            .attr('y', d => y(d.count) - 5)
+            .text(d => d.count);
+
+        // Network Graph
+        const svg2 = d3.select('#networkChart');
+        const width2 = svg2.node().parentElement.offsetWidth - 40;
+        const height2 = 360;
+        svg2.attr('width', width2).attr('height', height2);
+
+        const g = svg2.append('g')
+            .attr('transform', `translate(${width2/2},${height2/2})`);
+
+        // Create nodes from links
+        const nodes = [];
+        const nodeMap = new Map();
+        relatedTerms.forEach(link => {
+            [link.source, link.target].forEach(name => {
+                if (!nodeMap.has(name)) {
+                    const node = {id: name, group: 1};
+                    nodes.push(node);
+                    nodeMap.set(name, node);
+                }
+            });
+        });
+
+        const links = relatedTerms.map(d => ({
+            source: nodeMap.get(d.source),
+            target: nodeMap.get(d.target),
+            value: d.value
+        }));
+
+        const simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(links).id(d => d.id).distance(80))
+            .force('charge', d3.forceManyBody().strength(-300))
+            .force('center', d3.forceCenter(0, 0));
+
+        const link = g.selectAll('line')
+            .data(links)
+            .enter()
+            .append('line')
+            .attr('class', 'link')
+            .attr('stroke-width', d => d.value);
+
+        const node = g.selectAll('circle')
+            .data(nodes)
+            .enter()
+            .append('circle')
+            .attr('class', 'node')
+            .attr('r', 20)
+            .attr('fill', d => {
+                const index = nodes.indexOf(d) % 8;
+                const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#00f2fe', '#43e97b', '#fa709a', '#fee140'];
+                return colors[index];
+            })
+            .call(d3.drag()
+                .on('start', dragStarted)
+                .on('drag', dragged)
+                .on('end', dragEnded));
+
+        const labels = g.selectAll('text')
+            .data(nodes)
+            .enter()
+            .append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', '.3em')
+            .attr('font-size', '11px')
+            .attr('fill', 'white')
+            .attr('font-weight', 'bold')
+            .text(d => d.id.substring(0, 4));
+
+        simulation.on('tick', () => {
+            link
+                .attr('x1', d => d.source.x)
+                .attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x)
+                .attr('y2', d => d.target.y);
+            node
+                .attr('cx', d => d.x)
+                .attr('cy', d => d.y);
+            labels
+                .attr('x', d => d.x)
+                .attr('y', d => d.y);
+        });
+
+        function dragStarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragEnded(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+    </script>
+</body>
+</html>
